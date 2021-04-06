@@ -1838,7 +1838,7 @@ void Tracking::Track()
 
 
             // Check if we need to insert a new keyframe
-            if(bNeedKF && (bOK|| (mState==RECENTLY_LOST && (mSensor == System::IMU_MONOCULAR || mSensor == System::IMU_STEREO))))
+            if(bNeedKF && mCurrentFrame.mpImuPreintegrated && (bOK|| (mState==RECENTLY_LOST && (mSensor == System::IMU_MONOCULAR || mSensor == System::IMU_STEREO))))
                 CreateNewKeyFrame();
 
             // We allow points with high innovation (considererd outliers by the Huber Function)
@@ -2441,7 +2441,7 @@ bool Tracking::TrackWithMotionModel()
 
 
 
-    if (mpAtlas->isImuInitialized() && (mCurrentFrame.mnId>mnLastRelocFrameId+mnFramesToResetIMU))
+    if (mpAtlas->isImuInitialized() && (mCurrentFrame.mnId>mnLastRelocFrameId+mnFramesToResetIMU) && ((mbMapUpdated && mpLastKeyFrame && mpImuPreintegratedFromLastKF) || (!mbMapUpdated && mCurrentFrame.mpImuPreintegratedFrame)) )
     {
         // Predict ste with IMU if it is initialized and it doesnt need reset
         PredictStateIMU();
@@ -2551,12 +2551,12 @@ bool Tracking::TrackLocalMap()
         Optimizer::PoseOptimization(&mCurrentFrame);
     else
     {
-        if(mCurrentFrame.mnId<=mnLastRelocFrameId+mnFramesToResetIMU)
+        if(mCurrentFrame.mnId<=mnLastRelocFrameId+mnFramesToResetIMU || (!mCurrentFrame.mpImuPreintegrated) || (!mCurrentFrame.mpPrevFrame->mpcpi))
         {
             Verbose::PrintMess("TLM: PoseOptimization ", Verbose::VERBOSITY_DEBUG);
             Optimizer::PoseOptimization(&mCurrentFrame);
         }
-        else
+        else 
         {
             // if(!mbMapUpdated && mState == OK) //  && (mnMatchesInliers>30))
             if(!mbMapUpdated) //  && (mnMatchesInliers>30))

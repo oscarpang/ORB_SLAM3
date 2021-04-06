@@ -479,6 +479,30 @@ void System::Shutdown()
 
 void System::SaveTrajectoryTUM(const string &filename)
 {
+
+    vector<MapPoint*> vpMPs = mpAtlas->GetAllMapPoints();
+
+    // Transform all keyframes so that the first keyframe is at the origin.
+    // After a loop closure the first keyframe might not be at the origin.
+    ofstream f_cloud;
+    f_cloud.open("map_points.txt");
+    f_cloud << fixed;
+
+    for(size_t i=0; i<vpMPs.size(); i++) {
+        MapPoint* pMP = vpMPs[i];
+
+        if(pMP->isBad())
+            continue;
+
+        cv::Mat MPPositions = pMP->GetWorldPos();
+
+        f_cloud << setprecision(7) << " " << MPPositions.at<float>(0) << " " << MPPositions.at<float>(1) << " " << MPPositions.at<float>(2) << endl;
+    }
+
+    f_cloud.close();
+    cout << endl << "Map Points saved!" << endl;
+
+
     cout << endl << "Saving camera trajectory to " << filename << " ..." << endl;
     if(mSensor==MONOCULAR)
     {
@@ -523,22 +547,44 @@ void System::SaveTrajectoryTUM(const string &filename)
             pKF = pKF->GetParent();
         }
 
-        Trw = Trw*pKF->GetPose()*Two;
+	//Trw = Trw*pKF->GetPose()*Two;
+	// Without multiplying Two
+        Trw = Trw*pKF->GetPose();
 
         cv::Mat Tcw = (*lit)*Trw;
         cv::Mat Rwc = Tcw.rowRange(0,3).colRange(0,3).t();
         cv::Mat twc = -Rwc*Tcw.rowRange(0,3).col(3);
 
         vector<float> q = Converter::toQuaternion(Rwc);
+        std::stringstream ss;
+        ss << "/vol/ORB_SLAM3/pose/" <<fixed <<  setprecision(6) << *lT << ".txt";
+        std::ofstream ofile(ss.str());
+        // ofile << "1 0 0 " <<   twc.at<float>(0) << std::endl;
+        // ofile << "0 1 0 " <<   twc.at<float>(1) << std::endl;
+        // ofile << "0 0 1 " <<   twc.at<float>(2) << std::endl;
+        // ofile << "0 0 0 1" << std::endl;
+        ofile << Rwc.at<float>(0,0) << " " << Rwc.at<float>(0,1) << " " << Rwc.at<float>(0,2) << " " <<  twc.at<float>(0) << std::endl;
+        ofile << Rwc.at<float>(1,0) << " " << Rwc.at<float>(1,1) << " " << Rwc.at<float>(1,2) << " " <<  twc.at<float>(1) << std::endl;
+        ofile << Rwc.at<float>(2,0) << " " << Rwc.at<float>(2,1) << " " << Rwc.at<float>(2,2) << " " <<  twc.at<float>(2) << std::endl;
+        ofile << "0 0 0 1" << std::endl;
+
+    //    std::cout << twc << std::endl;
+
 
         f << setprecision(6) << *lT << " " <<  setprecision(9) << twc.at<float>(0) << " " << twc.at<float>(1) << " " << twc.at<float>(2) << " " << q[0] << " " << q[1] << " " << q[2] << " " << q[3] << endl;
     }
     f.close();
+
+
+
     // cout << endl << "trajectory saved!" << endl;
 }
 
 void System::SaveKeyFrameTrajectoryTUM(const string &filename)
 {
+
+
+
     cout << endl << "Saving keyframe trajectory to " << filename << " ..." << endl;
 
     vector<KeyFrame*> vpKFs = mpAtlas->GetAllKeyFrames();
@@ -568,6 +614,8 @@ void System::SaveKeyFrameTrajectoryTUM(const string &filename)
     }
 
     f.close();
+
+
 }
 
 void System::SaveTrajectoryEuRoC(const string &filename)

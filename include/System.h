@@ -178,7 +178,13 @@ public:
     void ChangeDataset();
 
     //void SaveAtlas(int type);
+    std::vector<MapPoint*> GetAtlasMapPoints() {
+        return mpAtlas->GetAllMapPoints();
+    }
 
+    std::vector<MapPoint*> GetAtlasRefMapPoints() {
+        return mpAtlas->GetReferenceMapPoints();
+    }
 private:
 
     //bool LoadAtlas(string filename, int type);

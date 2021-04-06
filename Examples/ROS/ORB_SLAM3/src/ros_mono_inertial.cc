@@ -33,8 +33,10 @@
 
 #include"../../../include/System.h"
 #include"../include/ImuTypes.h"
+#include <csignal>
 
 using namespace std;
+ORB_SLAM3::System* SLAM_ptr;
 
 class ImuGrabber
 {
@@ -65,7 +67,12 @@ public:
     cv::Ptr<cv::CLAHE> mClahe = cv::createCLAHE(3.0, cv::Size(8, 8));
 };
 
+void signalHandler( int signum ) {
+   cout << "Interrupt signal (" << signum << ") received.\n";
 
+   SLAM_ptr->SaveTrajectoryTUM("/vol/ORB_SLAM3/trajectory.txt");
+   exit(signum);  
+}
 
 int main(int argc, char **argv)
 {
@@ -90,7 +97,9 @@ int main(int argc, char **argv)
 
   // Create SLAM system. It initializes all system threads and gets ready to process frames.
   ORB_SLAM3::System SLAM(argv[1],argv[2],ORB_SLAM3::System::IMU_MONOCULAR,true);
-
+  SLAM_ptr = &SLAM;
+  std::signal(SIGINT, signalHandler);  
+  
   ImuGrabber imugb;
   ImageGrabber igb(&SLAM,&imugb,bEqual); // TODO
   

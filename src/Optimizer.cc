@@ -7902,6 +7902,7 @@ int Optimizer::PoseInertialOptimizationLastFrame(Frame *pFrame, bool bRecInit)
     VAk->setFixed(false);
     optimizer.addVertex(VAk);
 
+    std::cout << "pFrame->mpImuPreintegratedFrame is null ?" << !pFrame->mpImuPreintegratedFrame << std::endl;
     EdgeInertial* ei = new EdgeInertial(pFrame->mpImuPreintegratedFrame);
 
     ei->setVertex(0, VPk);
@@ -7934,8 +7935,10 @@ int Optimizer::PoseInertialOptimizationLastFrame(Frame *pFrame, bool bRecInit)
     ear->setInformation(InfoA);
     optimizer.addEdge(ear);
 
-    if (!pFp->mpcpi)
+    if (!pFp->mpcpi){
         Verbose::PrintMess("pFp->mpcpi does not exist!!!\nPrevious Frame " + to_string(pFp->mnId), Verbose::VERBOSITY_NORMAL);
+        std::cout << "pFp->mpcpi does not exist!!!\nPrevious Frame " << to_string(pFp->mnId) << std::endl;
+    }
 
     EdgePriorPoseImu* ep = new EdgePriorPoseImu(pFp->mpcpi);
 
