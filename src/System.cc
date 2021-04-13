@@ -32,6 +32,7 @@
 #include <boost/archive/binary_oarchive.hpp>
 #include <boost/archive/xml_iarchive.hpp>
 #include <boost/archive/xml_oarchive.hpp>
+#include <utility>
 
 namespace ORB_SLAM3
 {
@@ -961,6 +962,46 @@ void System::ChangeDataset()
     }
 
     mpTracker->NewDataset();
+}
+
+void System::getTrajectory(
+    std::function<void(double, cv::Mat &, std::vector<float> &)> callback) {
+  // For each frame we have a reference keyframe (lRit), the timestamp (lT) and
+  // a flag
+  // which is true when tracking failed (lbL).
+  list<ORB_SLAM3::KeyFrame *>::iterator lRit = mpTracker->mlpReferences.begin();
+  list<double>::iterator lT = mpTracker->mlFrameTimes.begin();
+  list<bool>::iterator lbL = mpTracker->mlbLost.begin();
+  for (list<cv::Mat>::iterator lit = mpTracker->mlRelativeFramePoses.begin(),
+                               lend = mpTracker->mlRelativeFramePoses.end();
+       lit != lend; lit++, lRit++, lT++, lbL++) {
+    if (*lbL)
+      continue;
+
+    KeyFrame *pKF = *lRit;
+
+    cv::Mat Trw = cv::Mat::eye(4, 4, CV_32F);
+
+    // If the reference keyframe was culled, traverse the spanning tree to get a
+    // suitable keyframe.
+    while (pKF->isBad()) {
+      Trw = Trw * pKF->mTcp;
+      pKF = pKF->GetParent();
+    }
+
+    // Trw = Trw*pKF->GetPose()*Two;
+    // Without multiplying Two
+    Trw = Trw * pKF->GetPose();
+
+    cv::Mat Tcw = (*lit) * Trw;
+    cv::Mat Rwc = Tcw.rowRange(0, 3).colRange(0, 3).t();
+    cv::Mat twc = -Rwc * Tcw.rowRange(0, 3).col(3);
+
+    vector<float> q = Converter::toQuaternion(Rwc);
+
+    callback(*lT, twc, q);
+    // twc_vec.push_back(std::make_pair(*lT, twc));
+  }
 }
 
 /*void System::SaveAtlas(int type){

@@ -185,7 +185,11 @@ public:
     std::vector<MapPoint*> GetAtlasRefMapPoints() {
         return mpAtlas->GetReferenceMapPoints();
     }
-private:
+
+    void getTrajectory(
+        std::function<void(double, cv::Mat &, std::vector<float> &)> callback);
+
+  private:
 
     //bool LoadAtlas(string filename, int type);
 
