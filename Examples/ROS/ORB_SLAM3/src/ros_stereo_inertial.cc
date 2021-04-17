@@ -219,12 +219,15 @@ cv::Mat ImageGrabber::GetImage(const sensor_msgs::ImageConstPtr &img_msg) {
 
 void ImageGrabber::SyncWithImu() {
   ros::Publisher map_point_publisher =
-      handler->advertise<PointCloud>("/map_points", 1000);
+      handler->advertise<PointCloud>("/map_points", 10000);
   ros::Publisher trajectory_publisher =
-      handler->advertise<ORB_SLAM3::PoseStampedArray>("/trajectory", 1000);
+      handler->advertise<ORB_SLAM3::PoseStampedArray>("/trajectory", 10000);
 
-  // ros::Publisher chatter_pub = n.advertise<std_msgs::String>("chatter",
-  // 1000);
+  ros::Publisher gravity_publisher =
+      handler->advertise<geometry_msgs::PoseStamped>("/gravity", 10000);
+
+      long long last_publish_time = 0;
+
   const double maxTimeDiff = 0.01;
   while (1) {
     cv::Mat imLeft, imRight;
@@ -300,69 +303,83 @@ void ImageGrabber::SyncWithImu() {
 
       // std::vector<std::pair<double, cv::Mat>> twc_vec;
 
-      ORB_SLAM3::PoseStampedArray pose_stamped_array;
+      if(timeInt >= last_publish_time + 100) {
+        ORB_SLAM3::PoseStampedArray pose_stamped_array;
 
-      std::function<void(double, cv::Mat &, std::vector<float> &)> functor =
-          [&pose_stamped_array](double time, cv::Mat &twc,
-                                std::vector<float> &q) {
-            geometry_msgs::PoseStamped pose_stamped;
-            pose_stamped.header.stamp.sec = (int)time;
-            pose_stamped.header.stamp.nsec = (int)(fmod(time, 1) * 1e6);
+        std::function<void(double, cv::Mat &, std::vector<float> &)> functor =
+            [&pose_stamped_array](double time, cv::Mat &twc,
+                                  std::vector<float> &q) {
+              geometry_msgs::PoseStamped pose_stamped;
+              pose_stamped.header.stamp.sec = (int)time;
+              pose_stamped.header.stamp.nsec = (int)(fmod(time, 1) * 1e6);
 
-            pose_stamped.pose.position.x = twc.at<float>(0);
-            pose_stamped.pose.position.y = twc.at<float>(1);
-            pose_stamped.pose.position.z = twc.at<float>(2);
+              pose_stamped.pose.position.x = twc.at<float>(0);
+              pose_stamped.pose.position.y = twc.at<float>(1);
+              pose_stamped.pose.position.z = twc.at<float>(2);
 
-            pose_stamped.pose.orientation.x = q[0];
-            pose_stamped.pose.orientation.y = q[1];
-            pose_stamped.pose.orientation.z = q[2];
-            pose_stamped.pose.orientation.w = q[3];
+              pose_stamped.pose.orientation.x = q[0];
+              pose_stamped.pose.orientation.y = q[1];
+              pose_stamped.pose.orientation.z = q[2];
+              pose_stamped.pose.orientation.w = q[3];
 
-            pose_stamped_array.poses.push_back(pose_stamped);
-          };
+              pose_stamped_array.poses.push_back(pose_stamped);
+            };
 
-      pose_stamped_array.header.stamp =
-          ros::Time::now(); // timestamp of creation of the msg
-      pose_stamped_array.header.frame_id =
-          "map"; // frame id in which the array is published
+        pose_stamped_array.header.stamp =
+            ros::Time::now(); // timestamp of creation of the msg
+        pose_stamped_array.header.frame_id =
+            "map"; // frame id in which the array is published
 
-      mpSLAM->getTrajectory(functor);
+        mpSLAM->getTrajectory(functor);
 
-      trajectory_publisher.publish(pose_stamped_array);
+        trajectory_publisher.publish(pose_stamped_array);
+
+        vector<ORB_SLAM3::MapPoint *> vRefMPs = mpSLAM->GetAtlasRefMapPoints();
+        unordered_set<ORB_SLAM3::MapPoint *> sRefMPs(vRefMPs.begin(),
+                                                     vRefMPs.end());
+        vector<ORB_SLAM3::MapPoint *> vpMPs = mpSLAM->GetAtlasMapPoints();
+        PointCloud::Ptr map_point_cloud(new PointCloud);
+
+        for (size_t i = 0, iend = vpMPs.size(); i < iend; i++) {
+          if (!vpMPs[i] || vpMPs[i]->isBad())
+            continue;
+          cv::Mat MPPositions = vpMPs[i]->GetWorldPos();
+          bool is_ref = (sRefMPs.find(vpMPs[i]) != sRefMPs.end());
+
+          if (is_ref) {
+            map_point_cloud->points.push_back(pcl::PointXYZ(
+                MPPositions.at<float>(0), MPPositions.at<float>(1),
+                MPPositions.at<float>(2)));
+          }
+        }
+
+        map_point_cloud->height = 1;
+        map_point_cloud->width = map_point_cloud->points.size();
+        map_point_cloud->header.frame_id = "map";
+        map_point_publisher.publish((*map_point_cloud));
+
+        {
+          vector<float> Rwg = mpSLAM->getRwg();
+          geometry_msgs::PoseStamped pose_stamped;
+          pose_stamped.header.stamp.sec = (int)timeInt / 1000;
+          pose_stamped.header.stamp.nsec = (int)timeInt % 1000;
+
+          pose_stamped.pose.position.x = 0;
+          pose_stamped.pose.position.y = 0;
+          pose_stamped.pose.position.z = 0;
+
+          pose_stamped.pose.orientation.x = Rwg[0];
+          pose_stamped.pose.orientation.y = Rwg[1];
+          pose_stamped.pose.orientation.z = Rwg[2];
+          pose_stamped.pose.orientation.w = Rwg[3];
+          gravity_publisher.publish(pose_stamped);
+        }
 
 
-      // Write images
-      // std::stringstream image_left_ss;
-      // image_left_ss << "/vol/ORB_SLAM3/image_left/" << timeInt / 1000 <<
-      // "." << std::setfill('0') << std::setw(3) << timeInt % 1000 <<
-      // ".png"; cv::imwrite(image_left_ss.str(), imLeft);
-
-      // std::stringstream image_right_ss;
-      // image_right_ss << "/vol/ORB_SLAM3/image_right/" << timeInt / 1000
-      // << "." << std::setfill('0') << std::setw(3) << timeInt % 1000 <<
-      // ".png"; cv::imwrite(image_right_ss.str(), imRight);
-
-      vector<ORB_SLAM3::MapPoint *> vRefMPs = mpSLAM->GetAtlasRefMapPoints();
-      unordered_set<ORB_SLAM3::MapPoint *> sRefMPs(vRefMPs.begin(),
-                                                   vRefMPs.end());
-      vector<ORB_SLAM3::MapPoint *> vpMPs = mpSLAM->GetAtlasMapPoints();
-      PointCloud::Ptr map_point_cloud(new PointCloud);
-
-      for (size_t i = 0, iend = vpMPs.size(); i < iend; i++) {
-        if (!vpMPs[i] || vpMPs[i]->isBad())
-          continue;
-        cv::Mat MPPositions = vpMPs[i]->GetWorldPos();
-        bool is_ref = (sRefMPs.find(vpMPs[i]) != sRefMPs.end());
-
-        map_point_cloud->points.push_back(
-            pcl::PointXYZ(MPPositions.at<float>(0), MPPositions.at<float>(1),
-                          MPPositions.at<float>(2)));
+        last_publish_time = timeInt;
       }
 
-      map_point_cloud->height = 1;
-      map_point_cloud->width =map_point_cloud->points.size();
-      map_point_cloud->header.frame_id = "map";
-      map_point_publisher.publish((*map_point_cloud));
+      
 
       std::chrono::milliseconds tSleep(1);
       std::this_thread::sleep_for(tSleep);

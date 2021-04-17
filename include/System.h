@@ -22,6 +22,7 @@
 
 //#define SAVE_TIMES
 
+#include <opencv2/core/mat.hpp>
 #include <unistd.h>
 #include<stdio.h>
 #include<stdlib.h>
@@ -188,6 +189,8 @@ public:
 
     void getTrajectory(
         std::function<void(double, cv::Mat &, std::vector<float> &)> callback);
+
+    vector<float> getRwg();
 
   private:
 

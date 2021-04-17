@@ -1004,6 +1004,16 @@ void System::getTrajectory(
   }
 }
 
+vector<float> System::getRwg() {
+  Eigen::Quaterniond q(mpLocalMapper->mRwg);
+  vector<float> qvec;
+  qvec.push_back(q.x());
+  qvec.push_back(q.y());
+  qvec.push_back(q.z());
+  qvec.push_back(q.w());
+  return qvec;
+}
+
 /*void System::SaveAtlas(int type){
     cout << endl << "Enter the name of the file if you want to save the current Atlas session. To exit press ENTER: ";
     string saveFileName;
